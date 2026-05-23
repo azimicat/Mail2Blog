@@ -66,3 +66,7 @@ const CONFIG = {
 ```bash
 npx serve .
 ```
+
+## 関連リポジトリ
+
+メール受信・ブログ投稿処理は [blog-gas](https://github.com/azimicat/blog-gas) が担当。
