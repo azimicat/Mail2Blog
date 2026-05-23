@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mail2Blog</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+  <!-- ── ログイン画面 ── -->
+  <div id="login-view">
+    <div class="login-card">
+      <div class="logo">Mail2Blog</div>
+      <p class="tagline">Googleアカウントでサインインして記事を投稿</p>
+      <div id="google-signin-btn"></div>
+      <button class="theme-toggle" id="theme-btn-login"></button>
+    </div>
+  </div>
+
+  <!-- ── 投稿画面 ── -->
+  <div id="post-view" hidden>
+    <header>
+      <span class="logo">Mail2Blog</span>
+      <div class="header-user">
+        <span id="user-name"></span>
+        <button class="theme-toggle" id="theme-btn-header"></button>
+        <button id="logout-btn">ログアウト</button>
+      </div>
+    </header>
+
+    <div class="form-area">
+    <div id="config-warning" hidden></div>
+    <div id="banner" class="banner" hidden></div>
+
+    <form id="post-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="blog-select">投稿先ブログ</label>
+          <select id="blog-select" required></select>
+        </div>
+        <div class="form-group">
+          <label for="tags">タグ（カンマ区切り）</label>
+          <input type="text" id="tags" placeholder="例: 技術, 日記">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="title">タイトル</label>
+        <input type="text" id="title" placeholder="記事のタイトル" required>
+      </div>
+
+      <div class="form-group">
+        <label for="content">本文（Markdown）</label>
+        <textarea id="content" placeholder="記事の内容を Markdown で書いてください..." required></textarea>
+      </div>
+
+      <div class="form-actions">
+        <span id="save-indicator" hidden></span>
+        <button type="submit" id="submit-btn">メールで投稿する</button>
+      </div>
+    </form>
+    </div><!-- /.form-area -->
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
