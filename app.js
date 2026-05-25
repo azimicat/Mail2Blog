@@ -262,13 +262,14 @@ async function sendViaGmailAPI(to, subject, body) {
 
 function buildRawEmail(to, subject, body) {
   const encodedSubject = `=?UTF-8?B?${utf8ToBase64(subject)}?=`;
+  const formattedBody = body.replace(/(?<!\n)\n(?!\n)/g, '  \n');
   const email = [
     `To: ${to}`,
     `Subject: ${encodedSubject}`,
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=UTF-8',
     '',
-    body,
+    formattedBody,
   ].join('\r\n');
 
   return utf8ToBase64Url(email);
