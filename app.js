@@ -38,10 +38,29 @@ function cycleTheme() {
   applyTheme(next);
 }
 
-// ─── 下書き自動保存 ──────────────────────────────────────────────────────────
+// ─── セッション永続化 ────────────────────────────────────────────────────────
 
-const DRAFT_KEY = 'mail2blog_draft';
+const SESSION_KEY = 'mail2blog_session';
+
+function saveSession(user) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+}
+
+function loadSession() {
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { localStorage.removeItem(SESSION_KEY); return null; }
+}
+
+function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
+// ─── 下書き自動保存（ブログごと） ────────────────────────────────────────────
+
+const DRAFT_KEY_PREFIX = 'mail2blog_draft_';
 let saveTimer = null;
+let activeBlogId = null;
 
 function scheduleSave() {
   clearTimeout(saveTimer);
@@ -49,32 +68,49 @@ function scheduleSave() {
 }
 
 function saveDraft() {
+  const blogId = document.getElementById('blog-select').value;
+  const savedAt = new Date().toISOString();
   const draft = {
-    blogId: document.getElementById('blog-select').value,
     title: document.getElementById('title').value,
     tags: document.getElementById('tags').value,
     content: document.getElementById('content').value,
-    savedAt: new Date().toISOString(),
+    savedAt,
   };
-  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  showSaveIndicator(draft.savedAt, false);
+  localStorage.setItem(DRAFT_KEY_PREFIX + blogId, JSON.stringify(draft));
+  showSaveIndicator(savedAt, false);
+}
+
+function saveDraftForBlog(blogId) {
+  const title = document.getElementById('title').value;
+  const tags = document.getElementById('tags').value;
+  const content = document.getElementById('content').value;
+  if (!title && !tags && !content) return;
+  const draft = { title, tags, content, savedAt: new Date().toISOString() };
+  localStorage.setItem(DRAFT_KEY_PREFIX + blogId, JSON.stringify(draft));
 }
 
 function loadDraft() {
-  const raw = localStorage.getItem(DRAFT_KEY);
+  activeBlogId = document.getElementById('blog-select').value;
+  loadDraftForBlog(activeBlogId);
+}
+
+function loadDraftForBlog(blogId) {
+  document.getElementById('title').value = '';
+  document.getElementById('tags').value = '';
+  const ta = document.getElementById('content');
+  ta.value = '';
+  ta.style.height = '';
+  document.getElementById('save-indicator').hidden = true;
+
+  const raw = localStorage.getItem(DRAFT_KEY_PREFIX + blogId);
   if (!raw) return;
 
   let draft;
-  try { draft = JSON.parse(raw); } catch { localStorage.removeItem(DRAFT_KEY); return; }
+  try { draft = JSON.parse(raw); } catch { localStorage.removeItem(DRAFT_KEY_PREFIX + blogId); return; }
 
-  const select = document.getElementById('blog-select');
-  if (draft.blogId && [...select.options].some(o => o.value === draft.blogId)) {
-    select.value = draft.blogId;
-  }
   if (draft.title)   document.getElementById('title').value = draft.title;
   if (draft.tags)    document.getElementById('tags').value  = draft.tags;
   if (draft.content) {
-    const ta = document.getElementById('content');
     ta.value = draft.content;
     ta.style.height = 'auto';
     ta.style.height = ta.scrollHeight + 'px';
@@ -87,7 +123,8 @@ function loadDraft() {
 
 function clearDraft() {
   clearTimeout(saveTimer);
-  localStorage.removeItem(DRAFT_KEY);
+  const blogId = document.getElementById('blog-select').value;
+  localStorage.removeItem(DRAFT_KEY_PREFIX + blogId);
   document.getElementById('save-indicator').hidden = true;
 }
 
@@ -112,6 +149,12 @@ document.addEventListener('DOMContentLoaded', () => {
   validateConfig();
   populateBlogSelect();
   setupEventListeners();
+
+  const saved = loadSession();
+  if (saved) {
+    currentUser = saved;
+    showPostView();
+  }
 });
 
 function initGSI() {
@@ -149,13 +192,14 @@ if (typeof google !== 'undefined') {
 
 function handleCredentialResponse(response) {
   const payload = decodeJwt(response.credential);
-
   currentUser = { name: payload.name, email: payload.email };
+  saveSession(currentUser);
   showPostView();
 }
 
 function handleLogout() {
   google.accounts.id.disableAutoSelect();
+  clearSession();
   currentUser = null;
   showLoginView();
   clearBanner();
@@ -185,7 +229,16 @@ function setupEventListeners() {
   document.getElementById('logout-btn').addEventListener('click', handleLogout);
   document.getElementById('post-form').addEventListener('submit', handleSubmit);
 
-  ['blog-select', 'title', 'tags', 'content'].forEach(id => {
+  const blogSelect = document.getElementById('blog-select');
+  blogSelect.addEventListener('change', () => {
+    if (activeBlogId && activeBlogId !== blogSelect.value) {
+      saveDraftForBlog(activeBlogId);
+    }
+    activeBlogId = blogSelect.value;
+    loadDraftForBlog(activeBlogId);
+  });
+
+  ['title', 'tags', 'content'].forEach(id => {
     document.getElementById(id).addEventListener('input', scheduleSave);
   });
 
@@ -215,6 +268,7 @@ async function handleSubmit(e) {
     showBanner('success', `「${title}」を ${blog.name} に投稿しました`);
     document.getElementById('post-form').reset();
     populateBlogSelect();
+    activeBlogId = document.getElementById('blog-select').value;
     document.getElementById('content').style.height = '';
   } catch (err) {
     console.error('Gmail API error:', err);
