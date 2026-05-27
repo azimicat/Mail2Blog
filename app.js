@@ -263,9 +263,19 @@ async function handleSubmit(e) {
   clearBanner();
 
   try {
-    await sendViaGmailAPI(currentUser.email, `[${blogId}] ${title}`, content);
+    const subject = `[${blogId}] ${title}`;
+    if (isLocalEnv()) {
+      console.group('%c[Mail2Blog] ローカルテスト・未送信', 'color: #f90; font-weight: bold');
+      console.log('To:     ', currentUser.email);
+      console.log('Subject:', subject);
+      console.log('Body:\n' + content);
+      console.groupEnd();
+    } else {
+      await sendViaGmailAPI(currentUser.email, subject, content);
+    }
     clearDraft();
-    showBanner('success', `「${title}」を ${blog.name} に投稿しました`);
+    const label = isLocalEnv() ? `「${title}」を ${blog.name} に投稿しました（ローカルテスト・未送信）` : `「${title}」を ${blog.name} に投稿しました`;
+    showBanner('success', label);
     document.getElementById('post-form').reset();
     populateBlogSelect();
     activeBlogId = document.getElementById('blog-select').value;
@@ -277,6 +287,13 @@ async function handleSubmit(e) {
     btn.disabled = false;
     btn.textContent = 'メールで投稿する ✉';
   }
+}
+
+// ─── ローカル判定 ────────────────────────────────────────────────────────────
+
+function isLocalEnv() {
+  const h = window.location.hostname;
+  return h === 'localhost' || h === '127.0.0.1' || h === '';
 }
 
 // ─── Gmail API ───────────────────────────────────────────────────────────────
