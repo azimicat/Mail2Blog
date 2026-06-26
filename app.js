@@ -38,29 +38,10 @@ function cycleTheme() {
   applyTheme(next);
 }
 
-// ─── セッション永続化 ────────────────────────────────────────────────────────
+// ─── 下書き自動保存 ──────────────────────────────────────────────────────────
 
-const SESSION_KEY = 'mail2blog_session';
-
-function saveSession(user) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-}
-
-function loadSession() {
-  const raw = localStorage.getItem(SESSION_KEY);
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch { localStorage.removeItem(SESSION_KEY); return null; }
-}
-
-function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
-}
-
-// ─── 下書き自動保存（ブログごと） ────────────────────────────────────────────
-
-const DRAFT_KEY_PREFIX = 'mail2blog_draft_';
+const DRAFT_KEY = 'mail2blog_draft';
 let saveTimer = null;
-let activeBlogId = null;
 
 function scheduleSave() {
   clearTimeout(saveTimer);
@@ -68,49 +49,32 @@ function scheduleSave() {
 }
 
 function saveDraft() {
-  const blogId = document.getElementById('blog-select').value;
-  const savedAt = new Date().toISOString();
   const draft = {
+    blogId: document.getElementById('blog-select').value,
     title: document.getElementById('title').value,
     tags: document.getElementById('tags').value,
     content: document.getElementById('content').value,
-    savedAt,
+    savedAt: new Date().toISOString(),
   };
-  localStorage.setItem(DRAFT_KEY_PREFIX + blogId, JSON.stringify(draft));
-  showSaveIndicator(savedAt, false);
-}
-
-function saveDraftForBlog(blogId) {
-  const title = document.getElementById('title').value;
-  const tags = document.getElementById('tags').value;
-  const content = document.getElementById('content').value;
-  if (!title && !tags && !content) return;
-  const draft = { title, tags, content, savedAt: new Date().toISOString() };
-  localStorage.setItem(DRAFT_KEY_PREFIX + blogId, JSON.stringify(draft));
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  showSaveIndicator(draft.savedAt, false);
 }
 
 function loadDraft() {
-  activeBlogId = document.getElementById('blog-select').value;
-  loadDraftForBlog(activeBlogId);
-}
-
-function loadDraftForBlog(blogId) {
-  document.getElementById('title').value = '';
-  document.getElementById('tags').value = '';
-  const ta = document.getElementById('content');
-  ta.value = '';
-  ta.style.height = '';
-  document.getElementById('save-indicator').hidden = true;
-
-  const raw = localStorage.getItem(DRAFT_KEY_PREFIX + blogId);
+  const raw = localStorage.getItem(DRAFT_KEY);
   if (!raw) return;
 
   let draft;
-  try { draft = JSON.parse(raw); } catch { localStorage.removeItem(DRAFT_KEY_PREFIX + blogId); return; }
+  try { draft = JSON.parse(raw); } catch { localStorage.removeItem(DRAFT_KEY); return; }
 
+  const select = document.getElementById('blog-select');
+  if (draft.blogId && [...select.options].some(o => o.value === draft.blogId)) {
+    select.value = draft.blogId;
+  }
   if (draft.title)   document.getElementById('title').value = draft.title;
   if (draft.tags)    document.getElementById('tags').value  = draft.tags;
   if (draft.content) {
+    const ta = document.getElementById('content');
     ta.value = draft.content;
     ta.style.height = 'auto';
     ta.style.height = ta.scrollHeight + 'px';
@@ -123,8 +87,7 @@ function loadDraftForBlog(blogId) {
 
 function clearDraft() {
   clearTimeout(saveTimer);
-  const blogId = document.getElementById('blog-select').value;
-  localStorage.removeItem(DRAFT_KEY_PREFIX + blogId);
+  localStorage.removeItem(DRAFT_KEY);
   document.getElementById('save-indicator').hidden = true;
 }
 
@@ -149,12 +112,6 @@ document.addEventListener('DOMContentLoaded', () => {
   validateConfig();
   populateBlogSelect();
   setupEventListeners();
-
-  const saved = loadSession();
-  if (saved) {
-    currentUser = saved;
-    showPostView();
-  }
 });
 
 function initGSI() {
@@ -192,14 +149,13 @@ if (typeof google !== 'undefined') {
 
 function handleCredentialResponse(response) {
   const payload = decodeJwt(response.credential);
+
   currentUser = { name: payload.name, email: payload.email };
-  saveSession(currentUser);
   showPostView();
 }
 
 function handleLogout() {
   google.accounts.id.disableAutoSelect();
-  clearSession();
   currentUser = null;
   showLoginView();
   clearBanner();
@@ -229,16 +185,7 @@ function setupEventListeners() {
   document.getElementById('logout-btn').addEventListener('click', handleLogout);
   document.getElementById('post-form').addEventListener('submit', handleSubmit);
 
-  const blogSelect = document.getElementById('blog-select');
-  blogSelect.addEventListener('change', () => {
-    if (activeBlogId && activeBlogId !== blogSelect.value) {
-      saveDraftForBlog(activeBlogId);
-    }
-    activeBlogId = blogSelect.value;
-    loadDraftForBlog(activeBlogId);
-  });
-
-  ['title', 'tags', 'content'].forEach(id => {
+  ['blog-select', 'title', 'tags', 'content'].forEach(id => {
     document.getElementById(id).addEventListener('input', scheduleSave);
   });
 
@@ -263,22 +210,11 @@ async function handleSubmit(e) {
   clearBanner();
 
   try {
-    const subject = `[${blogId}] ${title}`;
-    if (isLocalEnv()) {
-      console.group('%c[Mail2Blog] ローカルテスト・未送信', 'color: #f90; font-weight: bold');
-      console.log('To:     ', currentUser.email);
-      console.log('Subject:', subject);
-      console.log('Body:\n' + content);
-      console.groupEnd();
-    } else {
-      await sendViaGmailAPI(currentUser.email, subject, content);
-    }
+    await sendViaGmailAPI(currentUser.email, `[${blogId}] ${title}`, content);
     clearDraft();
-    const label = isLocalEnv() ? `「${title}」を ${blog.name} に投稿しました（ローカルテスト・未送信）` : `「${title}」を ${blog.name} に投稿しました`;
-    showBanner('success', label);
+    showBanner('success', `「${title}」を ${blog.name} に投稿しました`);
     document.getElementById('post-form').reset();
     populateBlogSelect();
-    activeBlogId = document.getElementById('blog-select').value;
     document.getElementById('content').style.height = '';
   } catch (err) {
     console.error('Gmail API error:', err);
@@ -287,13 +223,6 @@ async function handleSubmit(e) {
     btn.disabled = false;
     btn.textContent = 'メールで投稿する ✉';
   }
-}
-
-// ─── ローカル判定 ────────────────────────────────────────────────────────────
-
-function isLocalEnv() {
-  const h = window.location.hostname;
-  return h === 'localhost' || h === '127.0.0.1' || h === '';
 }
 
 // ─── Gmail API ───────────────────────────────────────────────────────────────
